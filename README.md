@@ -8,7 +8,8 @@ This is a simple client that just uploads or downloads a file to the [transfer.s
 [![asciicast](https://asciinema.org/a/18680.png)](https://asciinema.org/a/18680)
 
 ## Requirements
-Its all stdlib except for the [python-requests](https://pypi.python.org/pypi/requests) library which can be installed via pip or your systems package manager or whatever.
+Its all stdlib except for the [python-requests](https://pypi.python.org/pypi/requests) and [python-clint](https://pypi.python.org/pypi/clint/) libraries which can be installed via pip 
+or your systems package manager or whatever. Alternatively, "pip install -r requirements.txt".
 
 ## Licence
 Licenced under the [WTFPL](http://wtfpl.net)
