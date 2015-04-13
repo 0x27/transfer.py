@@ -4,6 +4,7 @@
 # Version: 20150413.1
 # Author: Darren Martyn
 import requests
+from clint.textui import progress
 import sys
 import os
 
@@ -28,12 +29,15 @@ def download(url):
     filename = filename.split("/")[2]
     print "{*} Saving file to %s" %(filename)
     try:
-        r = requests.get(url=url)
+        r = requests.get(url=url, stream=True)
+        with open(filename, 'wb') as f:
+            total_length = int(r.headers.get('content-length'))
+            for chunk in progress.bar(r.iter_content(chunk_size=1024), expected_size=(total_length/1024) + 1):
+                if chunk:
+                    f.write(chunk)
+                    f.flush()
     except Exception, e:
         print "{-} Something has gone horribly wrong! Please report on the github issue tracker with the following backtrace: \n%s" %(e)
-    f = open(filename, "wb")
-    f.write(r.content)
-    f.close()
 
 def main(args):
     if len(args) != 2:
