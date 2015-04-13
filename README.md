@@ -5,7 +5,7 @@ Simple python client to upload files to the transfer.sh service
 This is a simple client that just uploads or downloads a file to the [transfer.sh](https://transfer.sh) service. It was written as part of writing a client that encrypts files prior to upload and decrypts on download, so I could work out any kinks in the uploading/downloading process.
 
 ## Asciinema Demo
-[![asciicast](https://asciinema.org/a/18674.png)](https://asciinema.org/a/18674)
+[![asciicast](https://asciinema.org/a/18680.png)](https://asciinema.org/a/18680)
 
 ## Requirements
 Its all stdlib except for the [python-requests](https://pypi.python.org/pypi/requests) library which can be installed via pip or your systems package manager or whatever.
