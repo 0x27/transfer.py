@@ -6,13 +6,37 @@
 from __future__ import print_function
 import sys
 import os
+import base64
 import logging
 import argparse
+import tempfile
+import subprocess
 import requests
 import progressbar
 
 
 LOG = logging.getLogger(__name__)
+
+
+def rand_password():
+    return base64.b32encode(os.urandom(15))
+
+
+# http://stackoverflow.com/questions/11367140/python-popen-gpg-supply-passphrase-and-encryption-text-both-through-stdin-or-fi
+def _gpg_pipe(args, data, passphrase):
+    keypipe = os.pipe()
+    os.write(keypipe[1], passphrase + '\n')
+    os.close(keypipe[1])
+
+    argv = ['gpg', '--passphrase-fd', str(keypipe[0]), '-q', '--batch'] + args
+    p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+    out, err = p.communicate(data)
+    os.close(keypipe[0])
+
+    if p.returncode: # pragma: no cover
+        raise RuntimeError("Failed to run, returncode: " + str(p.returncode))
+    return out
 
 
 def make_progress_bar():
@@ -66,26 +90,35 @@ class IterableToFileAdapter(object):
         return self.length
 
 
-def upload(file_path):
-    try:
-        filepath, filename = os.path.split(file_path)
-    except Exception:
-        LOG.exception("Invalid file path")
-        return
-    upload_url = "https://transfer.sh/%s" %(filename)
+def encrypt(file_path):
+    tmp = tempfile.NamedTemporaryFile(delete=False)
+    os.unlink(tmp.name)
+    password = rand_password()
+    _gpg_pipe(['-c', '-o', tmp.name, file_path], '', password)
+    return password, tmp.name
+
+
+def upload(args, file_path):
+    _, filename = os.path.split(file_path)
+    remove_file = False
+    password = None
+    if args.encrypt:
+        remove_file = True
+        password, file_path = encrypt(file_path)
+    upload_url = "https://transfer.sh/" + filename
     try:
         it = upload_in_chunks(file_path, 10)
         r = requests.put(url=upload_url, data=IterableToFileAdapter(it))
     except Exception:
         LOG.exception("Failed to upload file")
         return
-    try:
-        return r.text.strip()
-    except Exception:
-        LOG.exception("Failed to get uploaded URL")
+    finally:
+        if remove_file:
+            os.unlink(file_path)
+        return password, r.text.strip()
 
 
-def download(url):
+def download(args, url):
     # kludge for now
     filename = url.replace("https://transfer.sh", "")
     filename = filename.split("/")[2]
@@ -102,10 +135,13 @@ def download(url):
                 bar.update(readsofar)
                 f.write(chunk)
                 f.flush()
+        bar.finish()
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='http://transfer.sh utility')
+    parser.add_argument('-c', '--encrypt', action='store_true',
+                        help='Encrypt files before uploading')
     parser.add_argument('files', nargs='*', help='Files to upload')
     args = parser.parse_args()
     if not args.files:
@@ -114,28 +150,37 @@ def parse_args():
     return args
 
 
+def process_file(args, file_or_url):
+    if "https://transfer.sh" in file_or_url:
+        try:
+            download(args, file_or_url)
+        except Exception:
+            LOG.exception("error while downloading %s", file_or_url)
+            return
+    else:
+        if not os.path.exists(file_or_url):
+            LOG.warning("File doesn't exist: %r", file_or_url)
+            return
+        try:
+            password, file_url = upload(args, file_or_url) 
+        except Exception:
+            LOG.exception("error while uploading %s", file_or_url)
+            return
+        if not file_url:
+            LOG.error("Could not get uploaded file url!")
+            return
+        if password:
+            file_url = file_url + '#' + password
+        print("\n"+file_url+"\n")
+
+
 def main():
     args = parse_args()
-    for file_or_url in args.files:
-        if "https://transfer.sh" in file_or_url:
-            try:
-                download(url=file_or_url)
-            except Exception:
-                LOG.exception("error while downloading %s", file_or_url)
-                return 2
-        else:
-            if not os.path.exists(file_or_url):
-                LOG.warning("File doesn't exist: %r", file_or_url)
-                continue
-            try:
-                file_url = upload(file_path=file_or_url) 
-            except Exception:
-                LOG.exception("error while uploading %s", file_or_url)
-                return 3
-            if not file_url:
-                LOG.error("Could not get uploaded file url!")
-                return 4
-            print("\n"+file_url+"\n")
+    try:
+        for file_or_url in args.files:
+            process_file(args, file_or_url)
+    except KeyboardInterrupt:
+        LOG.info('Caught Ctrl+C, cancelled')
     return 0
         
 
