@@ -98,6 +98,12 @@ def encrypt(file_path):
     return password, tmp.name
 
 
+def decrypt(file_path, password):
+    output_file = file_path[:-4]
+    _gpg_pipe(['-d', '-o', output_file, file_path], '', password)
+    os.unlink(file_path)
+
+
 def upload(args, file_path):
     _, filename = os.path.split(file_path)
     remove_file = False
@@ -105,6 +111,7 @@ def upload(args, file_path):
     if args.encrypt:
         remove_file = True
         password, file_path = encrypt(file_path)
+        filename = filename + '.gpg'
     upload_url = "https://transfer.sh/" + filename
     try:
         it = upload_in_chunks(file_path, 10)
@@ -119,7 +126,9 @@ def upload(args, file_path):
 
 
 def download(args, url):
-    # kludge for now
+    password = None
+    if '#' in url:
+        url, password = url.split('#', 1)
     filename = url.replace("https://transfer.sh", "")
     filename = filename.split("/")[2]
     LOG.info("Saving %r to %r", url, filename)
@@ -136,6 +145,8 @@ def download(args, url):
                 f.write(chunk)
                 f.flush()
         bar.finish()
+    if password:
+        decrypt(filename, password)
 
 
 def parse_args():
